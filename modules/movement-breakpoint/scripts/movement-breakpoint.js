@@ -278,15 +278,27 @@ function patchTokenStart() {
     S.tokenLifecycleProto = proto;
   }
 }
-function patchLayer() {
-  const layer = canvas.tokens, proto = layer?.constructor?.prototype;
-  if (!proto || typeof proto._onDragLeftDrop !== "function" ||
+function patchLayer(early = false) {
+  // Patch the class prototype before Foundry activates the canvas layer.
+  // The interaction manager can capture handler references during activation;
+  // patching only at canvasReady is therefore too late for drag-move events.
+  const proto = globalThis.foundry?.canvas?.layers?.TokenLayer?.prototype
+    ?? canvas.tokens?.constructor?.prototype;
+  if (!proto) {
+    // The class namespace may not be available during init in some builds.
+    // Defer instead of permanently disabling the module.
+    if (!early) disable("Movement Breakpoint disabled: required token-layer drag API unavailable. Normal token dragging is unchanged.");
+    return;
+  }
+  if (typeof proto._onDragLeftMove !== "function" ||
+      typeof proto._onDragLeftDrop !== "function" ||
       typeof proto._onDragLeftCancel !== "function") {
-    disable("Movement Breakpoint disabled: required token-layer drag cleanup API unavailable. Normal token dragging is unchanged.");
+    disable("Movement Breakpoint disabled: required token-layer drag API unavailable. Normal token dragging is unchanged.");
     return;
   }
   if (S.layerProto === proto) return;
-  const drop = proto._onDragLeftDrop, cancel = proto._onDragLeftCancel;
+  const move = proto._onDragLeftMove, drop = proto._onDragLeftDrop, cancel = proto._onDragLeftCancel;
+  proto._onDragLeftMove = function (...args) { return dragMove(this, args[0], move, args); };
   proto._onDragLeftDrop = function (...args) {
     try { return drop.apply(this, args); } finally { clearDrag(); }
   };
@@ -302,7 +314,11 @@ function registerSettings() {
   game.settings.register(ID, "ghostOpacity", { name: "Ghost opacity (%)", scope: "client", config: true, type: Number, default: 40, range: { min: 10, max: 80, step: 5 } });
   game.settings.register(ID, "tokenScope", { name: "Affected tokens", scope: "world", config: true, type: String, default: "all", choices: { all: "All tokens", characters: "Character actors only" } });
 }
-Hooks.once("init", registerSettings);
+Hooks.once("init", () => {
+  registerSettings();
+  // Install the layer hooks before the canvas interaction manager binds them.
+  patchLayer(true);
+});
 Hooks.once("ready", () => {
   if (!SUPPORTED.has(majorVersion())) {
     disable("Movement Breakpoint disabled: Foundry v" + game.version + " is unsupported. Supported versions: v13 and v14.");

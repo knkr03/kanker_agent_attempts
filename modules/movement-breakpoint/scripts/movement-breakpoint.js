@@ -13,6 +13,8 @@ const SUPPORTED = new Set([13, 14]);
 const S = {
   disabled: false,
   tokenProto: null,
+  tokenMoveProto: null,
+  tokenLifecycleProto: null,
   layerProto: null,
   drag: null,
   baselines: new Map(),
@@ -232,30 +234,59 @@ function dragMove(layer, event, original, args) {
 }
 function patchTokenStart() {
   const proto = CONFIG.Token?.objectClass?.prototype;
-  if (!proto || typeof proto._onDragLeftStart !== "function") {
+  if (!proto || typeof proto._onDragLeftStart !== "function" ||
+      typeof proto._onDragLeftMove !== "function") {
     disable("Movement Breakpoint disabled: required token drag API unavailable. Normal token dragging is unchanged.");
     return;
   }
-  if (S.tokenProto === proto) return;
-  const original = proto._onDragLeftStart;
-  proto._onDragLeftStart = function (...args) {
-    startDrag(this, args[0]);
-    try { return original.apply(this, args); }
-    catch (e) { clearDrag(); throw e; }
-  };
-  S.tokenProto = proto;
+
+  // Foundry's token interaction manager invokes Token's drag callbacks. Patching
+  // TokenLayer._onDragLeftMove alone is unreliable because the interaction
+  // manager may retain the callback it captured when the layer was activated.
+  // Wrap the token's own move callback, which is on the same lifecycle as the
+  // _onDragLeftStart callback verified by the runtime diagnostic.
+  if (S.tokenProto !== proto) {
+    const originalStart = proto._onDragLeftStart;
+    proto._onDragLeftStart = function (...args) {
+      startDrag(this, args[0]);
+      try { return originalStart.apply(this, args); }
+      catch (e) { clearDrag(); throw e; }
+    };
+    S.tokenProto = proto;
+  }
+
+  if (S.tokenMoveProto !== proto) {
+    const originalMove = proto._onDragLeftMove;
+    proto._onDragLeftMove = function (...args) {
+      return dragMove(this, args[0], originalMove, args);
+    };
+    S.tokenMoveProto = proto;
+  }
+
+  // Clear temporary preview state on the token's own lifecycle as well as the
+  // layer lifecycle. This covers Foundry versions where callbacks are captured
+  // before a layer prototype is patched.
+  if (S.tokenLifecycleProto !== proto) {
+    for (const method of ["_onDragLeftDrop", "_onDragLeftCancel"]) {
+      if (typeof proto[method] !== "function") continue;
+      const original = proto[method];
+      proto[method] = function (...args) {
+        try { return original.apply(this, args); }
+        finally { clearDrag(); }
+      };
+    }
+    S.tokenLifecycleProto = proto;
+  }
 }
 function patchLayer() {
   const layer = canvas.tokens, proto = layer?.constructor?.prototype;
-  if (!proto || typeof proto._onDragLeftMove !== "function" ||
-      typeof proto._onDragLeftDrop !== "function" ||
+  if (!proto || typeof proto._onDragLeftDrop !== "function" ||
       typeof proto._onDragLeftCancel !== "function") {
-    disable("Movement Breakpoint disabled: required token-layer drag API unavailable. Normal token dragging is unchanged.");
+    disable("Movement Breakpoint disabled: required token-layer drag cleanup API unavailable. Normal token dragging is unchanged.");
     return;
   }
   if (S.layerProto === proto) return;
-  const move = proto._onDragLeftMove, drop = proto._onDragLeftDrop, cancel = proto._onDragLeftCancel;
-  proto._onDragLeftMove = function (...args) { return dragMove(this, args[0], move, args); };
+  const drop = proto._onDragLeftDrop, cancel = proto._onDragLeftCancel;
   proto._onDragLeftDrop = function (...args) {
     try { return drop.apply(this, args); } finally { clearDrag(); }
   };

@@ -1,0 +1,21 @@
+{
+  "id": "movement-breakpoint",
+  "title": "Movement Breakpoint",
+  "description": "Adds a brief drag breakpoint at a token's remaining D&D 5e movement, with a ghost preview of the intended destination.",
+  "version": "1.0.0",
+  "authors": [{"name": "Movement Breakpoint contributors"}],
+  "compatibility": {"minimum": "13", "verified": "13", "maximum": "14"},
+  "esmodules": ["scripts/movement-breakpoint.js"],
+  "styles": ["styles/movement-breakpoint.css"],
+  "languages": [{"lang": "en", "name": "English", "path": "lang/en.json"}],
+  "relationships": {
+    "systems": [{
+      "id": "dnd5e",
+      "type": "system",
+      "compatibility": {"minimum": "4.0.0"}
+    }]
+  },
+  "url": "https://github.com/knkr03/kanker_agent_attempts",
+  "manifest": "https://raw.githubusercontent.com/knkr03/kanker_agent_attempts/main/modules/movement-breakpoint/module.json",
+  "download": "https://github.com/knkr03/kanker_agent_attempts/archive/refs/heads/main.zip"
+}

@@ -1,0 +1,34 @@
+{
+  "MOVEMENT-BREAKPOINT": {
+    "Settings": {
+      "Enabled": {
+        "Name": "Enable movement breakpoint",
+        "Hint": "Temporarily constrain single-token dragging at estimated remaining walking movement."
+      },
+      "Delay": {
+        "Name": "Breakpoint delay (ms)",
+        "Hint": "Default 200 ms."
+      },
+      "GhostEnabled": {
+        "Name": "Show ghost destination",
+        "Hint": "Show a translucent token copy at the intended destination while constrained."
+      },
+      "GhostOpacity": {
+        "Name": "Ghost opacity (%)",
+        "Hint": "Opacity from 10% to 80%."
+      },
+      "TokenScope": {
+        "Name": "Affected tokens",
+        "Hint": "Choose all tokens or character actors only."
+      },
+      "ScopeAll": "All tokens",
+      "ScopeCharacters": "Character actors"
+    },
+    "Warnings": {
+      "UnsupportedVersion": "Movement Breakpoint disabled: unsupported Foundry version {version}.",
+      "UnsupportedApi": "Movement Breakpoint disabled because a required drag API is unavailable.",
+      "MovementUnavailable": "Movement could not be determined. Normal dragging will continue.",
+      "StartupBaseline": "Movement already spent before module initialization may not be reconstructable."
+    }
+  }
+}

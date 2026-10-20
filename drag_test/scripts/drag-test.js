@@ -2,9 +2,8 @@
  * Drag Test — 30 Unit Limit
  * Foundry VTT v13–v14
  *
- * Clamps the live token drag preview to 30 scene units from the token's
- * original position. The pointer can continue moving; the token preview
- * remains on the 30-unit radius until the drag is released.
+ * Restricts the active single-token drag preview to a 30-scene-unit radius
+ * around the token's original position.
  */
 const MODULE_ID = "drag_test";
 const MAX_DISTANCE_UNITS = 30;
@@ -12,81 +11,113 @@ const MAX_DISTANCE_UNITS = 30;
 Hooks.once("ready", () => {
   const layer = canvas?.tokens;
   const proto = layer?.constructor?.prototype;
-  if (!proto || proto.__dragTest30Installed) {
-    console.warn(`[${MODULE_ID}] Token layer unavailable; drag limiter not installed.`);
+
+  if (!proto) {
+    console.error(`[${MODULE_ID}] TokenLayer unavailable; drag limiter not installed.`);
+    return;
+  }
+  if (proto.__dragTest30Installed) {
+    console.warn(`[${MODULE_ID}] Drag limiter already installed.`);
     return;
   }
 
   const originalStart = proto._onDragLeftStart;
   const originalMove = proto._onDragLeftMove;
+  const originalDrop = proto._onDragLeftDrop;
+  const originalCancel = proto._onDragLeftCancel;
+
   if (typeof originalStart !== "function" || typeof originalMove !== "function") {
-    console.error(`[${MODULE_ID}] Could not find expected token drag handlers.`);
+    console.error(`[${MODULE_ID}] Expected TokenLayer drag handlers not found.`);
     return;
   }
 
-  proto._onDragLeftStart = function(event) {
-    const result = originalStart.call(this, event);
-    // Save the actual drag origin before subsequent mouse-move events.
-    const dragged = getDraggedTokens(this);
-    this._dragTest30Origins = new Map(
-      dragged.map(token => [token.id ?? token.document?.id, {
+  proto._onDragLeftStart = function(event, ...args) {
+    const result = originalStart.call(this, event, ...args);
+    // Foundry tracks the active token drag on the layer as _draggedToken.
+    const token = this._draggedToken;
+    if (token) {
+      this._dragTest30Origin = {
         token,
         x: Number(token.document?.x ?? token.x),
         y: Number(token.document?.y ?? token.y)
-      }])
-    );
+      };
+      console.debug(`[${MODULE_ID}] Drag started`, {
+        token: token.document?.name ?? token.name ?? token.id,
+        x: this._dragTest30Origin.x,
+        y: this._dragTest30Origin.y
+      });
+    } else {
+      this._dragTest30Origin = null;
+      console.warn(`[${MODULE_ID}] Drag started but TokenLayer._draggedToken is empty.`);
+    }
     return result;
   };
 
-  proto._onDragLeftMove = function(event) {
-    const result = originalMove.call(this, event);
-    clampDraggedTokens(this);
+  proto._onDragLeftMove = function(event, ...args) {
+    const result = originalMove.call(this, event, ...args);
+    clampActiveToken(this);
     return result;
   };
 
-  // The module only wraps the handlers once, even if ready hooks are rerun.
+  if (typeof originalDrop === "function") {
+    proto._onDragLeftDrop = function(event, ...args) {
+      try {
+        clampActiveToken(this);
+        return originalDrop.call(this, event, ...args);
+      } finally {
+        this._dragTest30Origin = null;
+      }
+    };
+  }
+
+  if (typeof originalCancel === "function") {
+    proto._onDragLeftCancel = function(event, ...args) {
+      try {
+        return originalCancel.call(this, event, ...args);
+      } finally {
+        this._dragTest30Origin = null;
+      }
+    };
+  }
+
   proto.__dragTest30Installed = true;
   console.info(`[${MODULE_ID}] Drag limit enabled: ${MAX_DISTANCE_UNITS} scene units.`);
 
-  function getDraggedTokens(tokenLayer) {
-    const candidates = tokenLayer._dragged ?? tokenLayer._controlled ?? canvas.tokens.controlled ?? [];
-    const tokens = Array.isArray(candidates) ? candidates : [candidates];
-    return tokens.filter(token => token && (token.document || Number.isFinite(token.x)));
-  }
-
-  function clampDraggedTokens(tokenLayer) {
-    const origins = tokenLayer._dragTest30Origins;
-    if (!origins?.size) return;
+  function clampActiveToken(tokenLayer) {
+    const origin = tokenLayer._dragTest30Origin;
+    // Re-read Foundry's active drag token in case it was assigned after start.
+    const token = tokenLayer._draggedToken ?? origin?.token;
+    if (!origin || !token) return;
 
     const gridSize = Number(canvas.dimensions?.size);
-    const sceneUnitsPerGrid = Number(canvas.scene?.grid?.distance);
-    if (!(gridSize > 0) || !(sceneUnitsPerGrid > 0)) return;
-    const pixelsPerUnit = gridSize / sceneUnitsPerGrid;
-    const maxPixels = MAX_DISTANCE_UNITS * pixelsPerUnit;
-
-    for (const { token, x: originX, y: originY } of origins.values()) {
-      if (!Number.isFinite(originX) || !Number.isFinite(originY)) continue;
-
-      // Read the live placeable coordinates, not the document's last saved
-      // coordinates, so the visual drag preview is constrained immediately.
-      const currentX = Number(token.x);
-      const currentY = Number(token.y);
-      if (!Number.isFinite(currentX) || !Number.isFinite(currentY)) continue;
-
-      const dx = currentX - originX;
-      const dy = currentY - originY;
-      const length = Math.hypot(dx, dy);
-      if (length <= maxPixels || length === 0) continue;
-
-      const scale = maxPixels / length;
-      token.position?.set?.(originX + dx * scale, originY + dy * scale);
-      // PlaceableObject.position may not be writable through set() on all
-      // supported versions; assign coordinates as a fallback.
-      if (Math.hypot(Number(token.x) - originX, Number(token.y) - originY) > maxPixels + 0.5) {
-        token.x = originX + dx * scale;
-        token.y = originY + dy * scale;
-        token.refresh?.();
-      }
+    const unitsPerGrid = Number(canvas.scene?.grid?.distance);
+    if (!(gridSize > 0) || !(unitsPerGrid > 0)) {
+      console.warn(`[${MODULE_ID}] Invalid grid dimensions; cannot clamp drag.`);
+      return;
     }
+
+    // Token document x/y and placeable x/y are canvas pixel coordinates.
+    const maxPixels = MAX_DISTANCE_UNITS * gridSize / unitsPerGrid;
+    const currentX = Number(token.x);
+    const currentY = Number(token.y);
+    if (!Number.isFinite(currentX) || !Number.isFinite(currentY)) return;
+
+    const dx = currentX - origin.x;
+    const dy = currentY - origin.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance <= maxPixels || distance === 0) return;
+
+    const scale = maxPixels / distance;
+    const x = origin.x + dx * scale;
+    const y = origin.y + dy * scale;
+
+    // Move the active preview/placeable to the edge of the allowed radius.
+    if (token.position && typeof token.position.set === "function") {
+      token.position.set(x, y);
+    } else {
+      token.x = x;
+      token.y = y;
+    }
+    token.refresh?.();
   }
 });

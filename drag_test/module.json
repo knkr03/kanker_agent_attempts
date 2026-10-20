@@ -1,0 +1,19 @@
+{
+  "id": "drag_test",
+  "title": "Drag Test — 30 Unit Limit",
+  "description": "Limits a dragged token's movement preview to 30 scene units from its drag origin.",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13",
+    "maximum": "14"
+  },
+  "authors": [
+    {
+      "name": "knkr03"
+    }
+  ],
+  "esmodules": [
+    "scripts/drag-test.js"
+  ]
+}

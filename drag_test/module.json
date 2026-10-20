@@ -2,7 +2,7 @@
   "id": "drag_test",
   "title": "Drag Test — 30 Unit Limit",
   "description": "Limits a dragged token's movement preview to 30 scene units from its drag origin.",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "compatibility": {
     "minimum": "13",
     "verified": "13",
@@ -15,7 +15,7 @@
   ],
   "url": "https://github.com/knkr03/kanker_agent_attempts/tree/main/drag_test",
   "manifest": "https://raw.githubusercontent.com/knkr03/kanker_agent_attempts/main/drag_test/module.json",
-  "download": "https://github.com/knkr03/kanker_agent_attempts/archive/refs/heads/main.zip",
+  "download": "https://raw.githubusercontent.com/knkr03/kanker_agent_attempts/main/drag_test/drag_test.zip",
   "esmodules": [
     "scripts/drag-test.js"
   ]

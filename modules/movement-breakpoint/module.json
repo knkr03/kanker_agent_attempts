@@ -2,7 +2,7 @@
   "id": "movement-breakpoint",
   "title": "Movement Breakpoint",
   "description": "Adds a brief drag breakpoint at a token's remaining D&D 5e movement, with a ghost preview of the intended destination.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "authors": [{"name": "Movement Breakpoint contributors"}],
   "compatibility": {"minimum": "13", "verified": "13", "maximum": "14"},
   "esmodules": ["scripts/movement-breakpoint.js"],
